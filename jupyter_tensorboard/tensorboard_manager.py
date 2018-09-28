@@ -12,38 +12,36 @@ sys.argv = ["tensorboard"]
 
 from tensorboard.backend import application   # noqa
 
-try:
-    # Tensorboard 0.4.x above series
-    from tensorboard import default
-    if hasattr(default, 'PLUGIN_LOADERS'):
-        # Tensorflow 1.10 series
-        logging.debug("Tensorboard 1.10 or above series detected")
-        from tensorboard import program
+from tensorboard import version
+from pkg_resources import parse_version
 
-        def create_tb_app(logdir, reload_interval, purge_orphaned_data):
-            argv = [
-                        "--logdir", logdir,
-                        "--reload_interval", str(reload_interval),
-                        "--purge_orphaned_data", str(purge_orphaned_data),
-                   ]
-            tensorboard = program.TensorBoard(
-                default.PLUGIN_LOADERS,
-                default.get_assets_zip_provider())
-            tensorboard.configure(argv)
-            return application.standard_tensorboard_wsgi(
-                tensorboard.flags,
-                tensorboard.plugin_loaders,
-                tensorboard.assets_zip_provider)
-    else:
-        logging.debug("Tensorboard 0.4.x series detected")
 
-        def create_tb_app(logdir, reload_interval, purge_orphaned_data):
-            return application.standard_tensorboard_wsgi(
-                logdir=logdir, reload_interval=reload_interval,
-                purge_orphaned_data=purge_orphaned_data,
-                plugins=default.get_plugins())
+if parse_version(version.VERSION) >= parse_version('1.10.0a0'):
+    logging.debug("Tensorboard 1.10 or above series detected")
+    from tensorboard import program
 
-except ImportError:
+    def create_tb_app(logdir, reload_interval, purge_orphaned_data):
+        argv = [
+                    "",
+                    "--logdir", logdir,
+                    "--reload_interval", str(reload_interval),
+                    "--purge_orphaned_data", str(purge_orphaned_data),
+               ]
+        tensorboard = program.TensorBoard()
+        tensorboard.configure(argv)
+        return application.standard_tensorboard_wsgi(
+            tensorboard.flags,
+            tensorboard.plugin_loaders,
+            tensorboard.assets_zip_provider)
+elif parse_version('0.4.0a0') <= parse_version(version.VERSION) < parse_version('1.10.0a0'):
+    logging.debug("Tensorboard 0.4.x series detected")
+
+    def create_tb_app(logdir, reload_interval, purge_orphaned_data):
+        return application.standard_tensorboard_wsgi(
+            logdir=logdir, reload_interval=reload_interval,
+            purge_orphaned_data=purge_orphaned_data,
+            plugins=default.get_plugins())
+else:
     # Tensorboard 0.3.x series
     from tensorboard.plugins.audio import audio_plugin
     from tensorboard.plugins.core import core_plugin
