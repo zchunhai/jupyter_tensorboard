@@ -8,6 +8,9 @@ import itertools
 from collections import namedtuple
 import logging
 
+import six
+import tensorflow as tf
+
 sys.argv = ["tensorboard"]
 
 from tensorboard.backend import application   # noqa
@@ -22,10 +25,10 @@ try:
 
         def create_tb_app(logdir, reload_interval, purge_orphaned_data):
             argv = [
-                        "",
-                        "--logdir", logdir,
-                        "--reload_interval", str(reload_interval),
-                        "--purge_orphaned_data", str(purge_orphaned_data),
+                    "",
+                    "--logdir", logdir,
+                    "--reload_interval", str(reload_interval),
+                    "--purge_orphaned_data", str(purge_orphaned_data),
                    ]
             tensorboard = program.TensorBoard()
             tensorboard.configure(argv)
@@ -86,8 +89,14 @@ def start_reloading_multiplexer(multiplexer, path_to_run, reload_interval):
     def _ReloadForever():
         current_thread = threading.currentThread()
         while not current_thread.stop:
-            application.reload_multiplexer(multiplexer, path_to_run)
-            current_thread.reload_time = time.time()
+            start = time.time()
+            tf.logging.info('TensorBoard reload process beginning')
+            for path, name in six.iteritems(path_to_run):
+                multiplexer.AddRunsFromDirectory(path, name)
+            tf.logging.info('TensorBoard reload process: Reload the whole Multiplexer')
+            multiplexer.Reload()
+            duration = time.time() - start
+            tf.logging.info('TensorBoard done reloading. Load took %0.3f secs', duration)
             time.sleep(reload_interval)
     thread = threading.Thread(target=_ReloadForever)
     thread.reload_time = None
@@ -97,15 +106,13 @@ def start_reloading_multiplexer(multiplexer, path_to_run, reload_interval):
     return thread
 
 
-def TensorBoardWSGIApp(logdir, plugins, multiplexer,
-                       reload_interval, path_prefix=""):
+def TensorBoardWSGIApp(logdir, plugins, multiplexer, reload_interval,
+                       path_prefix="", reload_task='auto'):
+    thread = None
     path_to_run = application.parse_event_files_spec(logdir)
-    if reload_interval:
+    if reload_interval >= 0:
         thread = start_reloading_multiplexer(
             multiplexer, path_to_run, reload_interval)
-    else:
-        application.reload_multiplexer(multiplexer, path_to_run)
-        thread = None
     tb_app = application.TensorBoardWSGI(plugins)
     manager.add_instance(logdir, tb_app, thread)
     return tb_app
